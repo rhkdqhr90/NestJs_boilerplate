@@ -14,6 +14,14 @@ enum UserRole {
   LAWYER   // 법률 자문 변호사
 }
 
+enum PostCategory {
+  FREE         // 자유 게시판
+  ANONYMOUS    // 익명 고민
+  INFO         // 정보 공유
+  KNOWHOW      // 노하우
+  LEGAL_QNA    // 법률 Q&A
+}
+
 model User {
   id         String   @id @default(cuid())
   email      String   @unique
@@ -32,9 +40,11 @@ model User {
   provider   String?  @default("local") // "local", "google", "github"
   providerId String?  // OAuth Provider의 고유 ID
   
-  posts         Post[]
-  comments      Comment[]
-  refreshTokens RefreshToken[]
+  posts            Post[]
+  comments         Comment[]         @relation("CommentAuthor")
+  commentMentions  Comment[]         @relation("CommentMentions")
+  likes            Like[]
+  refreshTokens    RefreshToken[]
   
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -45,21 +55,32 @@ model User {
 }
 
 model Post {
-  id          String   @id @default(cuid())
+  id          String       @id @default(cuid())
   title       String
-  content     String   @db.Text
-  isAnonymous Boolean  @default(false)
+  content     String       @db.Text
+  category    PostCategory @default(FREE)
+  isAnonymous Boolean      @default(false)
+  ipHash      String?      // 익명 게시글용 IP 해시
+  
+  // 통계
+  viewCount    Int         @default(0)
+  likeCount    Int         @default(0)
+  commentCount Int         @default(0)
   
   authorId    String?
-  author      User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  author      User?        @relation(fields: [authorId], references: [id], onDelete: SetNull)
   
   comments    Comment[]
+  likes       Like[]
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
   @@index([authorId])
+  @@index([category])
   @@index([createdAt])
+  @@index([viewCount])
+  @@index([likeCount])
   @@map("posts")
 }
 
@@ -71,14 +92,42 @@ model Comment {
   post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
   
   authorId  String
-  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author    User     @relation("CommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  
+  // 1 Depth 대댓글 지원
+  parentCommentId String?
+  parentComment   Comment?  @relation("CommentReplies", fields: [parentCommentId], references: [id], onDelete: Cascade)
+  replies         Comment[] @relation("CommentReplies")
+  
+  // 멘션 기능 (@유저명)
+  mentionedUserId String?
+  mentionedUser   User?     @relation("CommentMentions", fields: [mentionedUserId], references: [id], onDelete: SetNull)
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
   @@index([postId])
   @@index([authorId])
+  @@index([parentCommentId])
+  @@index([mentionedUserId])
   @@map("comments")
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  
+  @@unique([userId, postId]) // 중복 좋아요 방지
+  @@index([userId])
+  @@index([postId])
+  @@map("likes")
 }
 
 model RefreshToken {

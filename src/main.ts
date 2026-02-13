@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
@@ -10,7 +11,7 @@ import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter'
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // Winston을 기본 Logger로 교체
   app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
@@ -27,6 +28,9 @@ async function bootstrap() {
   // Security
   app.use(helmet());
   app.use(cookieParser());
+
+  // ✅ Trust proxy: 프록시 환경에서 실제 클라이언트 IP 추출
+  app.set('trust proxy', 1);
 
   // CORS
   app.enableCors({
