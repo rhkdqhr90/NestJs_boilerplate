@@ -1,16 +1,17 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import configuration from './config/configuration';
 import { validationSchema } from './config/validation.schema';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { PrismaService } from './database/prisma.service';
 import { WinstonModule } from 'nest-winston';
 import { winstonConfig } from './config/winston.config';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
-import { TransformInterceptor } from './common/interceptors/transform.interceptor';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_INTERCEPTOR, APP_GUARD } from '@nestjs/core';
+import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -24,12 +25,17 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
         abortEarly: false,
       },
     }),
-    ThrottlerModule.forRoot([
-      {
-        ttl: 60000,
-        limit: 10,
-      },
-    ]),
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => [
+        {
+          ttl: (config.get<number>('throttle.ttl') || 60) * 1000, // 초를 밀리초로 변환
+          limit: config.get<number>('throttle.limit') || 10,
+        },
+      ],
+    }),
+    AuthModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [
@@ -40,8 +46,8 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
       useClass: LoggingInterceptor,
     },
     {
-      provide: APP_INTERCEPTOR,
-      useClass: TransformInterceptor,
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
     },
   ],
   exports: [PrismaService],

@@ -8,24 +8,38 @@ datasource db {
 }
 
 enum UserRole {
-  USER
-  ADMIN
+  USER     // 일반 회원
+  ADMIN    // 관리자
+  TEACHER  // 인증된 보육교사/특수교사
+  LAWYER   // 법률 자문 변호사
 }
 
 model User {
   id         String   @id @default(cuid())
   email      String   @unique
-  password   String
+  password   String?  // OAuth 사용자는 비밀번호 없음
   nickname   String
   role       UserRole @default(USER)
   isVerified Boolean  @default(false)
   
-  posts      Post[]
-  comments   Comment[]
+  // 프로필
+  profileImage String?  // 프로필 이미지 URL
+  
+  // 활동 기록
+  lastLoginAt DateTime?  // 마지막 로그인 시간
+  
+  // OAuth2 준비
+  provider   String?  @default("local") // "local", "google", "github"
+  providerId String?  // OAuth Provider의 고유 ID
+  
+  posts         Post[]
+  comments      Comment[]
+  refreshTokens RefreshToken[]
   
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
-  
+
+  @@unique([provider, providerId])
   @@index([email])
   @@map("users")
 }
@@ -65,4 +79,22 @@ model Comment {
   @@index([postId])
   @@index([authorId])
   @@map("comments")
+}
+
+model RefreshToken {
+  id         String    @id @default(cuid())
+  tokenHash  String    @unique
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+  
+  // 보안 로그 (선택)
+  userAgent  String?
+  ipAddress  String?
+  
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("refresh_tokens")
 }
