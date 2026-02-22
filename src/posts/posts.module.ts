@@ -1,11 +1,14 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { PostsService } from './posts.service';
 import { PostsController } from './posts.controller';
-import { PrismaService } from '../database/prisma.service';
+import { JobAutoCloseService } from './job-auto-close.service';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { UploadsModule } from '../uploads/uploads.module';
 
 @Module({
+  imports: [NotificationsModule, forwardRef(() => UploadsModule)],
   controllers: [PostsController],
-  providers: [PostsService, PrismaService],
+  providers: [PostsService, JobAutoCloseService],
   exports: [PostsService],
 })
 export class PostsModule {}

@@ -3,15 +3,30 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  Inject,
 } from '@nestjs/common';
+import type { LoggerService } from '@nestjs/common';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
+import { NotificationType, PostCategory } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 import { CommentResponseDto } from './dto/comment-response.dto';
+import { safeDecrementCommentCount } from '../common/utils/counter.util';
 
 @Injectable()
 export class CommentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  // 스팸 방지 설정
+  private readonly MAX_COMMENTS_PER_POST = 100; // 게시글당 최대 댓글 수
+  private readonly MAX_COMMENTS_PER_USER_PER_MINUTE = 5; // 사용자당 분당 최대 댓글 수
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+    @Inject(WINSTON_MODULE_NEST_PROVIDER)
+    private readonly logger: LoggerService,
+  ) {}
 
   // ========================================
   // 1. 댓글 작성
@@ -27,6 +42,29 @@ export class CommentsService {
     const post = await this.prisma.post.findUnique({ where: { id: postId } });
     if (!post) {
       throw new NotFoundException('게시글을 찾을 수 없습니다');
+    }
+
+    // 구인공고, 법률 Q&A는 댓글 불가
+    if (
+      post.category === PostCategory.JOB_POSTING ||
+      post.category === PostCategory.LEGAL_QNA
+    ) {
+      throw new BadRequestException('이 게시판에서는 댓글을 작성할 수 없습니다');
+    }
+
+    // 스팸 방지: 사용자당 분당 댓글 수 확인 (트랜잭션 밖에서 사전 체크 - 정확한 체크는 아래 트랜잭션에서)
+    const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
+    const recentCommentCount = await this.prisma.comment.count({
+      where: {
+        authorId: userId,
+        createdAt: { gte: oneMinuteAgo },
+      },
+    });
+
+    if (recentCommentCount >= this.MAX_COMMENTS_PER_USER_PER_MINUTE) {
+      throw new BadRequestException(
+        '댓글을 너무 자주 작성하고 있습니다. 잠시 후 다시 시도해주세요.',
+      );
     }
 
     // 부모 댓글 검증 (대댓글인 경우)
@@ -62,8 +100,19 @@ export class CommentsService {
       }
     }
 
-    // 댓글 생성 + commentCount 증가
+    // 댓글 생성 + commentCount 증가 (트랜잭션 내에서 스팸 체크 포함)
     const comment = await this.prisma.$transaction(async (tx) => {
+      // 스팸 방지: 게시글당 최대 댓글 수 확인 (트랜잭션 내에서 정확한 체크)
+      const currentPost = await tx.post.findUnique({
+        where: { id: postId },
+        select: { commentCount: true },
+      });
+      if (currentPost && currentPost.commentCount >= this.MAX_COMMENTS_PER_POST) {
+        throw new BadRequestException(
+          `이 게시글에는 더 이상 댓글을 작성할 수 없습니다 (최대 ${this.MAX_COMMENTS_PER_POST}개)`,
+        );
+      }
+
       // 1. 댓글 생성
       const newComment = await tx.comment.create({
         data: {
@@ -99,7 +148,65 @@ export class CommentsService {
       return newComment;
     });
 
+    // 알림 생성 (비동기, 실패해도 댓글 작성은 성공)
+    this.createNotifications(post, comment, parentCommentId, mentionedUserId, userId).catch((err) => {
+      this.logger.error('Failed to create notification', err, 'CommentsService');
+    });
+
     return new CommentResponseDto(comment);
+  }
+
+  /**
+   * 댓글 관련 알림 생성
+   */
+  private async createNotifications(
+    post: { id: string; authorId: string | null },
+    comment: { id: string },
+    parentCommentId: string | undefined,
+    mentionedUserId: string | undefined,
+    actorId: string,
+  ) {
+    // 1. 대댓글인 경우 → 부모 댓글 작성자에게 REPLY 알림
+    if (parentCommentId) {
+      const parentComment = await this.prisma.comment.findUnique({
+        where: { id: parentCommentId },
+        select: { authorId: true },
+      });
+
+      // 자기 자신에게 알림 보내지 않음
+      if (parentComment?.authorId && parentComment.authorId !== actorId) {
+        await this.notificationsService.create({
+          type: NotificationType.REPLY,
+          userId: parentComment.authorId,
+          actorId,
+          postId: post.id,
+          commentId: comment.id,
+        });
+      }
+    }
+    // 2. 일반 댓글인 경우 → 게시글 작성자에게 COMMENT 알림
+    // 자기 자신에게 알림 보내지 않음
+    else if (post.authorId && post.authorId !== actorId) {
+      await this.notificationsService.create({
+        type: NotificationType.COMMENT,
+        userId: post.authorId,
+        actorId,
+        postId: post.id,
+        commentId: comment.id,
+      });
+    }
+
+    // 3. 멘션된 경우 → 멘션된 사용자에게 MENTION 알림
+    // 자기 자신에게 알림 보내지 않음
+    if (mentionedUserId && mentionedUserId !== actorId) {
+      await this.notificationsService.create({
+        type: NotificationType.MENTION,
+        userId: mentionedUserId,
+        actorId,
+        postId: post.id,
+        commentId: comment.id,
+      });
+    }
   }
 
   // ========================================
@@ -239,11 +346,8 @@ export class CommentsService {
       // 2. 댓글 삭제 (Cascade로 답글도 자동 삭제)
       await tx.comment.delete({ where: { id } });
 
-      // 3. commentCount 감소 (본인 + 답글)
-      await tx.post.update({
-        where: { id: comment.postId },
-        data: { commentCount: { decrement: 1 + replyCount } },
-      });
+      // 3. commentCount 안전 감소 (본인 + 답글, 음수 방지)
+      await safeDecrementCommentCount(tx, comment.postId, 1 + replyCount);
     });
   }
 }

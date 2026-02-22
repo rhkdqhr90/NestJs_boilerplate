@@ -15,6 +15,8 @@ interface HttpExceptionResponse {
 
 @Catch(HttpException)
 export class HttpExceptionFilter implements ExceptionFilter {
+  private readonly isProduction = process.env.NODE_ENV === 'production';
+
   catch(exception: HttpException, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
@@ -35,19 +37,27 @@ export class HttpExceptionFilter implements ExceptionFilter {
       if (responseObj.message) {
         message = responseObj.message;
       }
-      if (responseObj.errors) {
+      // 프로덕션에서는 상세 오류 정보 숨김
+      if (responseObj.errors && !this.isProduction) {
         errors = responseObj.errors;
       }
     }
 
-    const errorResponse = {
+    // 응답 구성 (프로덕션에서 path/method 숨김)
+    const errorResponse: Record<string, unknown> = {
       statusCode: status,
       timestamp: new Date().toISOString(),
-      path: request.url,
-      method: request.method,
       message,
-      ...(errors && { errors }),
     };
+
+    // 개발 환경에서만 추가 정보 포함
+    if (!this.isProduction) {
+      errorResponse.path = request.url;
+      errorResponse.method = request.method;
+      if (errors) {
+        errorResponse.errors = errors;
+      }
+    }
 
     response.status(status).json(errorResponse);
   }

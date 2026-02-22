@@ -10,16 +10,134 @@ datasource db {
 enum UserRole {
   USER     // 일반 회원
   ADMIN    // 관리자
-  TEACHER  // 인증된 보육교사/특수교사
-  LAWYER   // 법률 자문 변호사
+}
+
+enum JobType {
+  SPECIAL_EDUCATION    // 특수교사
+  DAYCARE_TEACHER      // 보육교사
+  KINDERGARTEN         // 유치원교사
+  CARE_TEACHER         // 돌봄교사
+  STUDENT              // 학생
+  DIRECTOR             // 원장/센터장
+  LAWYER               // 법률 자문 변호사
+  OTHER                // 기타
 }
 
 enum PostCategory {
+  // 커뮤니티 그룹
   FREE         // 자유 게시판
   ANONYMOUS    // 익명 고민
+  HUMOR        // 유머
+
+  // 정보공유 그룹
   INFO         // 정보 공유
   KNOWHOW      // 노하우
+  CLASS_MATERIAL    // 수업자료
+  CERTIFICATION     // 자격증
+
+  // 교직생활 그룹
+  SCHOOL_EVENT      // 학교행사
+  PARENT_COUNSEL    // 학부모상담
+  TEACHER_DAYCARE   // 보육교사 전용
+  TEACHER_SPECIAL   // 특수교사 전용
+  TEACHER_KINDERGARTEN // 유치원교사 전용
+
+  // 법률/권익
   LEGAL_QNA    // 법률 Q&A
+
+  // 구인
+  JOB_POSTING  // 구인공고
+}
+
+// 구인공고 하위 카테고리
+enum JobSubCategory {
+  DAYCARE       // 어린이집
+  KINDERGARTEN  // 유치원
+  SPECIAL_ED    // 특수교사
+  HOME_TUTOR    // 홈티(방문교사)
+  ACADEMY       // 학원
+  OTHER         // 기타
+}
+
+// 지역
+enum Region {
+  SEOUL         // 서울
+  BUSAN         // 부산
+  DAEGU         // 대구
+  INCHEON       // 인천
+  GWANGJU       // 광주
+  DAEJEON       // 대전
+  ULSAN         // 울산
+  SEJONG        // 세종
+  GYEONGGI      // 경기
+  GANGWON       // 강원
+  CHUNGBUK      // 충북
+  CHUNGNAM      // 충남
+  JEONBUK       // 전북
+  JEONNAM       // 전남
+  GYEONGBUK     // 경북
+  GYEONGNAM     // 경남
+  JEJU          // 제주
+}
+
+// 급여 타입
+enum SalaryType {
+  MONTHLY       // 월급
+  HOURLY        // 시급
+  NEGOTIABLE    // 협의
+}
+
+// 근무 형태
+enum EmploymentType {
+  FULL_TIME     // 정규직
+  PART_TIME     // 파트타임
+  CONTRACT      // 계약직
+  INTERN        // 인턴
+}
+
+// 치료/교육 분야 태그 (구인공고용)
+enum TherapyTag {
+  LANGUAGE      // 언어치료
+  COGNITIVE     // 인지학습
+  LEARNING      // 학습지도
+  PLAY          // 놀이치료
+  SENSORY       // 감각통합
+  MOTOR         // 운동치료
+  ART           // 미술치료
+  MUSIC         // 음악치료
+}
+
+// 지원 상태
+enum ApplicationStatus {
+  PENDING       // 검토 대기
+  REVIEWING     // 검토 중
+  ACCEPTED      // 합격
+  REJECTED      // 불합격
+  CANCELLED     // 지원 취소
+}
+
+// 인증 요청 상태
+enum VerificationStatus {
+  PENDING       // 대기 중
+  APPROVED      // 승인됨
+  REJECTED      // 반려됨
+}
+
+// 신고 처리 조치 타입
+enum ReportAction {
+  NONE              // 조치 없음
+  WARNING           // 경고
+  POST_DELETE       // 게시글 삭제
+  COMMENT_DELETE    // 댓글 삭제
+  USER_BAN_1DAY     // 1일 정지
+  USER_BAN_7DAYS    // 7일 정지
+  USER_BAN_30DAYS   // 30일 정지
+  USER_BAN_PERMANENT // 영구 정지
+}
+
+enum ExpertType {
+  LAWYER             // 변호사
+  LEGAL_CONSULTANT   // 법률 상담사
 }
 
 model User {
@@ -29,23 +147,58 @@ model User {
   nickname   String
   role       UserRole @default(USER)
   isVerified Boolean  @default(false)
-  
+
+  // 교사쉼터 전용 필드
+  jobType    JobType? // 직종 (선택)
+  career     Int?     // 경력 (년, 선택)
+
   // 프로필
   profileImage String?  // 프로필 이미지 URL
-  
+
+  // 전문가 인증 (법률 Q&A 답변 권한)
+  isExpert         Boolean     @default(false)
+  expertType       ExpertType?
+  expertVerifiedAt DateTime?
+
   // 활동 기록
   lastLoginAt DateTime?  // 마지막 로그인 시간
-  
+
+  // 정지 상태
+  isBanned      Boolean   @default(false)  // 정지 여부
+  bannedAt      DateTime?                  // 정지 시작 시간
+  bannedUntil   DateTime?                  // 정지 해제 시간 (null이면 영구 정지)
+  banReason     String?                    // 정지 사유
+
   // OAuth2 준비
   provider   String?  @default("local") // "local", "google", "github"
   providerId String?  // OAuth Provider의 고유 ID
-  
-  posts            Post[]
-  comments         Comment[]         @relation("CommentAuthor")
-  commentMentions  Comment[]         @relation("CommentMentions")
-  likes            Like[]
-  refreshTokens    RefreshToken[]
-  
+
+  // 약관 동의 기록 (법적 증거)
+  termsAgreedAt   DateTime?  // 이용약관 동의 일시
+  privacyAgreedAt DateTime?  // 개인정보처리방침 동의 일시
+
+  posts                   Post[]
+  comments                Comment[]         @relation("CommentAuthor")
+  commentMentions         Comment[]         @relation("CommentMentions")
+  likes                   Like[]
+  bookmarks               Bookmark[]
+  refreshTokens           RefreshToken[]
+  passwordResetTokens     PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  notifications           Notification[]
+  answers                 Answer[]
+  applications            Application[]     @relation("UserApplications")
+
+  // 신고 관계
+  reportsMade             Report[]          @relation("ReportsMade")
+  reportsReceived         Report[]          @relation("ReportsReceived")
+  reportsProcessed        Report[]          @relation("ReportsProcessed")
+
+  // 인증 요청 관계
+  verificationRequests      VerificationRequest[]
+  verificationsProcessed    VerificationRequest[] @relation("VerificationsProcessed")
+  verificationAccessLogs    VerificationAccessLog[] @relation("VerificationAccessLogs")
+
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -60,27 +213,64 @@ model Post {
   content     String       @db.Text
   category    PostCategory @default(FREE)
   isAnonymous Boolean      @default(false)
-  ipHash      String?      // 익명 게시글용 IP 해시
-  
+  ipHash      String?      // 익명 게시글용 IP 해시 (보조 검증)
+  anonymousAuthorId String? // 익명 게시글 실제 작성자 ID (삭제 권한 검증용)
+
   // 통계
   viewCount    Int         @default(0)
   likeCount    Int         @default(0)
   commentCount Int         @default(0)
-  
+
+  // 구인공고 전용 필드 (nullable)
+  jobSubCategory JobSubCategory?  // 구인공고 하위 카테고리
+  region         Region?          // 지역
+  salaryType     SalaryType?      // 급여 타입
+  salaryMin      Int?             // 최소 급여 (월급: 만원, 시급: 원)
+  salaryMax      Int?             // 최대 급여
+  isRecruiting   Boolean          @default(true) // 모집 중 여부
+
+  // 1순위: 핵심 채용 정보
+  organizationName  String?       // 기관명/회사명
+  contactPhone      String?       // 담당자 전화번호
+  contactEmail      String?       // 담당자 이메일
+  contactKakao      String?       // 담당자 카카오톡 ID
+  deadline          DateTime?     // 채용 마감일
+  isAutoClose       Boolean       @default(true) // 마감일 자동 마감 여부
+  recruitCount      Int?          // 모집 인원
+  workingHours      String?       // 근무 시간 (예: "09:00~18:00")
+
+  // 2순위: 상세 정보
+  employmentType    EmploymentType? // 근무 형태
+  benefits          String?       @db.Text // 복리후생/상세 근무조건
+  requirements      String?       @db.Text // 요구 자격
+  detailAddress     String?       // 상세 주소
+
+  // 치료/교육 분야 태그 (다중 선택)
+  therapyTags       TherapyTag[]  @default([])
+
+  // 지원 관계
+  applications      Application[]
+
   authorId    String?
   author      User?        @relation(fields: [authorId], references: [id], onDelete: SetNull)
-  
+
   comments    Comment[]
   likes       Like[]
-  
+  bookmarks   Bookmark[]
+  reports     Report[]
+  answers     Answer[]     // 법률 Q&A 답변
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  
+
   @@index([authorId])
   @@index([category])
   @@index([createdAt])
   @@index([viewCount])
   @@index([likeCount])
+  @@index([jobSubCategory])
+  @@index([region])
+  @@index([therapyTags])
   @@map("posts")
 }
 
@@ -102,10 +292,12 @@ model Comment {
   // 멘션 기능 (@유저명)
   mentionedUserId String?
   mentionedUser   User?     @relation("CommentMentions", fields: [mentionedUserId], references: [id], onDelete: SetNull)
-  
+
+  reports     Report[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+
   @@index([postId])
   @@index([authorId])
   @@index([parentCommentId])
@@ -138,12 +330,416 @@ model RefreshToken {
   expiresAt  DateTime
   createdAt  DateTime  @default(now())
   revokedAt  DateTime?
-  
+
   // 보안 로그 (선택)
   userAgent  String?
   ipAddress  String?
-  
+
   @@index([userId])
   @@index([tokenHash])
   @@map("refresh_tokens")
+}
+
+// JWT Access Token 블랙리스트 (비밀번호 변경, 정지 등에서 사용)
+model TokenBlacklist {
+  id        String   @id @default(cuid())
+  userId    String
+  revokedAt DateTime @default(now())
+  expiresAt DateTime // Access Token 만료 시간 (이후 자동 삭제 가능)
+  reason    String?  // 블랙리스트 사유 (password_change, ban, logout_all 등)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("token_blacklist")
+}
+
+model PasswordResetToken {
+  id         String    @id @default(cuid())
+  tokenHash  String    @unique
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+  usedAt     DateTime?
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("password_reset_tokens")
+}
+
+model EmailVerificationToken {
+  id           String    @id @default(cuid())
+  tokenHash    String    @unique
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt    DateTime
+  createdAt    DateTime  @default(now())
+  verifiedAt   DateTime?
+  attempts     Int       @default(0) // 인증 시도 횟수 (브루트포스 방지)
+  maxAttempts  Int       @default(5) // 최대 시도 횟수
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("email_verification_tokens")
+}
+
+enum NotificationType {
+  COMMENT              // 내 글에 댓글
+  REPLY                // 내 댓글에 답글
+  LIKE                 // 내 글에 좋아요
+  MENTION              // 멘션됨
+  NEW_APPLICATION      // 새 지원자 (채용담당자용)
+  APPLICATION_STATUS   // 지원 상태 변경 (지원자용)
+  VERIFICATION_APPROVED  // 인증 승인됨
+  VERIFICATION_REJECTED  // 인증 반려됨
+}
+
+// ========================================
+// Phase 2: 신고 시스템
+// ========================================
+
+enum ReportType {
+  POST         // 게시글 신고
+  COMMENT      // 댓글 신고
+  USER         // 사용자 신고
+}
+
+enum ReportStatus {
+  PENDING      // 대기 중
+  REVIEWED     // 검토 완료
+  RESOLVED     // 처리 완료
+  DISMISSED    // 기각
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  type      NotificationType
+
+  // 알림 받는 사용자
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // 알림 발생시킨 사용자
+  actorId   String?
+
+  // 관련 게시글/댓글
+  postId    String?
+  commentId String?
+
+  // 읽음 여부
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+
+  createdAt DateTime         @default(now())
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+// ========================================
+// Phase 2: 신고 모델
+// ========================================
+
+model Report {
+  id              String       @id @default(cuid())
+  type            ReportType
+  reason          String       @db.Text  // 신고 사유
+  status          ReportStatus @default(PENDING)
+
+  // 신고자
+  reporterId      String
+  reporter        User         @relation("ReportsMade", fields: [reporterId], references: [id], onDelete: Cascade)
+
+  // 신고 대상 (타입에 따라 하나만 사용)
+  targetUserId    String?
+  targetUser      User?        @relation("ReportsReceived", fields: [targetUserId], references: [id], onDelete: SetNull)
+
+  targetPostId    String?
+  targetPost      Post?        @relation(fields: [targetPostId], references: [id], onDelete: SetNull)
+
+  targetCommentId String?
+  targetComment   Comment?     @relation(fields: [targetCommentId], references: [id], onDelete: SetNull)
+
+  // 관리자 처리
+  processedById   String?
+  processedBy     User?        @relation("ReportsProcessed", fields: [processedById], references: [id], onDelete: SetNull)
+  processedAt     DateTime?
+  processingNote  String?      @db.Text  // 처리 메모
+  action          ReportAction @default(NONE)  // 조치 내용
+
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([reporterId])
+  @@index([targetUserId])
+  @@index([targetPostId])
+  @@index([targetCommentId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("reports")
+}
+
+// ========================================
+// Phase 2: 북마크 모델
+// ========================================
+
+model Bookmark {
+  id        String   @id @default(cuid())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId]) // 중복 북마크 방지
+  @@index([userId])
+  @@index([postId])
+  @@map("bookmarks")
+}
+
+// ========================================
+// 구인공고 지원 모델
+// ========================================
+
+model Application {
+  id              String            @id @default(cuid())
+
+  // 지원 대상 공고
+  postId          String
+  post            Post              @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  // 지원자
+  applicantId     String
+  applicant       User              @relation("UserApplications", fields: [applicantId], references: [id], onDelete: Cascade)
+
+  // 지원 상태
+  status          ApplicationStatus @default(PENDING)
+
+  // 지원 내용
+  coverLetter     String?           @db.Text  // 자기소개서
+  resumeUrl       String?                     // 이력서 파일 URL
+  resumeFileName  String?                     // 이력서 원본 파일명
+
+  // 채용담당자 메모 (내부용)
+  recruiterNote   String?           @db.Text
+
+  // 연락처 (지원 시점 스냅샷)
+  contactPhone    String?
+  contactEmail    String?
+
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@unique([postId, applicantId])  // 중복 지원 방지
+  @@index([postId])
+  @@index([applicantId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("applications")
+}
+
+// ========================================
+// 사용자 인증 요청 모델
+// ========================================
+
+model VerificationRequest {
+  id               String             @id @default(cuid())
+
+  // 요청자
+  userId           String
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // 인증 유형 (사용자 자유 입력: 재직증명서, 사업자등록증 등)
+  verificationType String
+
+  // 파일 정보
+  fileUrl          String             // 업로드된 파일 URL
+  originalFileName String             // 원본 파일명
+  fileType         String             // MIME type
+  fileSize         Int                // 파일 크기 (bytes)
+  isEncrypted      Boolean            @default(false)  // 파일 암호화 여부
+
+  // 추가 메모 (선택)
+  note             String?            @db.Text
+
+  // 상태 관리
+  status           VerificationStatus @default(PENDING)
+
+  // 관리자 처리
+  processedById    String?
+  processedBy      User?              @relation("VerificationsProcessed", fields: [processedById], references: [id], onDelete: SetNull)
+  processedAt      DateTime?
+  rejectionReason  String?            @db.Text  // 반려 사유
+
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  // 접근 로그
+  accessLogs       VerificationAccessLog[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("verification_requests")
+}
+
+// ========================================
+// 인증 파일 접근 로그 (감사 추적)
+// ========================================
+model VerificationAccessLog {
+  id                    String              @id @default(cuid())
+
+  // 접근 대상
+  verificationRequestId String
+  verificationRequest   VerificationRequest @relation(fields: [verificationRequestId], references: [id], onDelete: Cascade)
+
+  // 접근자 (관리자)
+  accessedById          String
+  accessedBy            User                @relation("VerificationAccessLogs", fields: [accessedById], references: [id], onDelete: Cascade)
+
+  // 접근 정보
+  action                String              // VIEW, DOWNLOAD
+  ipAddress             String?
+  userAgent             String?
+
+  createdAt             DateTime            @default(now())
+
+  @@index([verificationRequestId])
+  @@index([accessedById])
+  @@index([createdAt])
+  @@map("verification_access_logs")
+}
+
+// ========================================
+// 법률 Q&A 답변 모델 (전문가 전용)
+// ========================================
+
+model Answer {
+  id             String    @id @default(cuid())
+  content        String    @db.Text
+
+  // 답변 대상 게시글 (LEGAL_QNA 카테고리만)
+  postId         String
+  post           Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  // 답변 작성자 (전문가만)
+  authorId       String
+  author         User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  // 베스트 답변 선택
+  isBest         Boolean   @default(false)
+  bestSelectedAt DateTime?
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([postId])
+  @@index([authorId])
+  @@map("answers")
+}
+
+// ========================================
+// 문의하기 모델
+// ========================================
+
+enum InquiryType {
+  GENERAL       // 일반 문의
+  ACCOUNT       // 계정 관련
+  REPORT        // 신고/불편 사항
+  SUGGESTION    // 서비스 제안
+  PARTNERSHIP   // 제휴/협력 문의
+  OTHER         // 기타
+}
+
+enum InquiryStatus {
+  PENDING       // 대기 중
+  IN_PROGRESS   // 처리 중
+  RESOLVED      // 처리 완료
+  CLOSED        // 종료
+}
+
+model Inquiry {
+  id              String        @id @default(cuid())
+  type            InquiryType
+  email           String        // 답변 받을 이메일
+  subject         String        // 제목
+  content         String        @db.Text  // 내용
+
+  status          InquiryStatus @default(PENDING)
+
+  // 회원 문의인 경우
+  userId          String?
+
+  // 관리자 응답
+  response        String?       @db.Text
+  respondedAt     DateTime?
+  respondedById   String?
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([email])
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("inquiries")
+}
+
+// ========================================
+// 배너 모델
+// ========================================
+
+enum BannerType {
+  PROMO       // 프로모션 배너 (홈 상단 캐러셀)
+  SIDEBAR     // 사이드바 광고
+}
+
+model Banner {
+  id              String      @id @default(cuid())
+  title           String      // 배너 제목 (관리용)
+  imageUrl        String      // 이미지 URL
+  linkUrl         String?     // 클릭 시 이동 URL
+  alt             String      // 이미지 alt 텍스트
+  type            BannerType  @default(PROMO)
+
+  isActive        Boolean     @default(true)   // 활성화 여부
+  priority        Int         @default(0)      // 정렬 순서 (높을수록 먼저)
+
+  // 노출 기간 (선택)
+  startDate       DateTime?
+  endDate         DateTime?
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([type, isActive])
+  @@index([priority])
+  @@map("banners")
+}
+
+// ========================================
+// 공지사항 모델
+// ========================================
+
+model Announcement {
+  id              String    @id @default(cuid())
+  title           String
+  content         String    @db.Text
+
+  isPinned        Boolean   @default(false)  // 상단 고정
+  isPublished     Boolean   @default(true)   // 공개 여부
+
+  // 작성자 (관리자)
+  authorId        String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([isPinned, createdAt])
+  @@index([isPublished])
+  @@map("announcements")
 }

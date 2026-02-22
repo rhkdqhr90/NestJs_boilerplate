@@ -23,7 +23,7 @@ export class RefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh') {
     const refreshToken = req.cookies?.refreshToken;
 
     if (!refreshToken) {
-      throw new UnauthorizedException('Refresh token not found');
+      throw new UnauthorizedException('토큰을 찾을 수 없습니다');
     }
 
     return {

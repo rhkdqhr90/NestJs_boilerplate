@@ -13,6 +13,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import { ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsInt, Min, Max, IsOptional } from 'class-validator';
 import type { Request } from 'express';
@@ -37,6 +38,7 @@ class CommentPaginationDto {
   limit: number = 50;
 }
 
+@ApiTags('Comments')
 @Controller()
 export class CommentsController {
   constructor(private readonly commentsService: CommentsService) {}
